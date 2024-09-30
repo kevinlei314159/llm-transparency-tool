@@ -8,6 +8,7 @@
     "normalize_before_unembedding": true,
     "prepend_bos": false,
     "do_neuron_level": true,
+    "do_head_level": false,
     "contribution_threshold": 0.01,
     "logit_lens_topK": 10,
     "logit_lens_topK_neurons": 10

@@ -4,7 +4,7 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import List, Optional
+from typing import List, Optional, Dict, Union
 
 import networkx as nx
 import torch
@@ -80,7 +80,7 @@ def build_full_graph(
     model: TransparentLlm,
     batch_i: int = 0,
     renormalizing_threshold: Optional[float] = None,
-) -> nx.Graph:
+) -> Union[nx.Graph, Dict[str, torch.Tensor]]:
     """
     Build the contribution graph for all blocks of the model and all tokens.
 
@@ -95,6 +95,8 @@ def build_full_graph(
 
     builder = GraphBuilder(n_layers, n_tokens)
 
+    c_attns, c_resid_attns = [], []
+
     for layer in range(n_layers):
         c_attn, c_resid_attn = contributions.get_attention_contributions(
             resid_pre=model.residual_in(layer)[batch_i].unsqueeze(0),
@@ -105,6 +107,8 @@ def build_full_graph(
             c_attn, c_resid_attn = contributions.apply_threshold_and_renormalize(
                 renormalizing_threshold, c_attn, c_resid_attn
             )
+        c_attns.append(c_attn)
+        c_resid_attns.append(c_resid_attn)
 
         for token_from in range(n_tokens):
             for token_to in range(n_tokens):
@@ -132,7 +136,10 @@ def build_full_graph(
                 layer, token, c_resid_ffn[batch_i, token].item()
             )
 
-    return builder.graph
+    return builder.graph, {
+        "c_attns": c_attns,
+        "c_resid_attns": c_resid_attns
+    }
 
 
 def build_paths_to_predictions(
