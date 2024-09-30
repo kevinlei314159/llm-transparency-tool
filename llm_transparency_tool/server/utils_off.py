@@ -8,12 +8,13 @@ import uuid
 from typing import List, Optional, Tuple, Union, Dict
 
 import networkx as nx
-import streamlit as st
+import numpy as np
+# import streamlit as st
 import torch
 import transformers
 
-import llm_transparency_tool.routes.graph
-from llm_transparency_tool.models.tlens_model import TransformerLensTransparentLlm
+import llm_transparency_tool.routes.graph_off
+from llm_transparency_tool.models.tlens_model_off import TransformerLensTransparentLlm
 from llm_transparency_tool.models.transparent_llm import TransparentLlm
 
 GPU = "gpu"
@@ -22,6 +23,10 @@ CPU = "cpu"
 # This variable is for expressing the idea that batch_id = 0, but make it more
 # readable than just 0.
 B0 = 0
+
+def get_val(x: torch.Tensor):
+    # return x.squeeze().to(torch.float16).numpy()
+    return x.squeeze().item()
 
 
 def possible_devices() -> List[str]:
@@ -39,16 +44,18 @@ def load_dataset(filename) -> List[str]:
     return dataset
 
 
-@st.cache_resource(
-    hash_funcs={
-        TransformerLensTransparentLlm: id
-    }
-)
+# @st.cache_resource(
+#     hash_funcs={
+#         TransformerLensTransparentLlm: id
+#     }
+# )
 def load_model(
     model_name: str,
+    revision: str,
     _device: str,
     _model_path: Optional[str] = None,
     _dtype: torch.dtype = torch.float32,
+    prepend_bos: bool = True
 ) -> TransparentLlm:
     """
     Returns the loaded model along with its key. The key is just a unique string which
@@ -61,8 +68,11 @@ def load_model(
 
     tl_lm = TransformerLensTransparentLlm(
         model_name=model_name,
+        revision=revision,
+        model_path=_model_path,
         hf_model=causal_lm,
         tokenizer=tokenizer,
+        prepend_bos=prepend_bos,
         device=_device,
         dtype=_dtype,
     )
@@ -85,26 +95,15 @@ def run_model_with_session_caching(
     model_key: str,
     sentence: str,
 ):
-    LAST_RUN_MODEL_KEY = "last_run_model_key"
-    LAST_RUN_SENTENCE = "last_run_sentence"
-    state = st.session_state
-
-    if (
-        state.get(LAST_RUN_MODEL_KEY, None) == model_key
-        and state.get(LAST_RUN_SENTENCE, None) == sentence
-    ):
-        return
 
     run_model(_model, sentence)
-    state[LAST_RUN_MODEL_KEY] = model_key
-    state[LAST_RUN_SENTENCE] = sentence
 
 
-@st.cache_resource(
-    hash_funcs={
-        TransformerLensTransparentLlm: id
-    }
-)
+# @st.cache_resource(
+#     hash_funcs={
+#         TransformerLensTransparentLlm: id
+#     }
+# )
 def get_contribution_graph(
     model: TransparentLlm,  # TODO bug here
     model_key: str,
@@ -115,19 +114,8 @@ def get_contribution_graph(
     The `model_key` and `tokens` are used only for caching. The model itself is not
     hashed, hence the `_` in the beginning.
     """
-    return llm_transparency_tool.routes.graph.build_full_graph(
+    return llm_transparency_tool.routes.graph_off.build_full_graph(
         model,
         B0,
         threshold,
     )
-
-
-def st_placeholder(
-    text: str,
-    container=st,
-    border: bool = True,
-    height: Optional[int] = 500,
-):
-    empty = container.empty()
-    empty.container(border=border, height=height).write(f'<small>{text}</small>', unsafe_allow_html=True)
-    return empty
