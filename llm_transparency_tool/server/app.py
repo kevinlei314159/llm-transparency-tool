@@ -12,7 +12,7 @@ from tqdm import tqdm
 import time
 from copy import deepcopy
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "5"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "5"
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))) # Why is it not working without this?
 
