@@ -11,9 +11,10 @@ import os
 from tqdm import tqdm
 import time
 from copy import deepcopy
-# import os
-# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "5"
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))) # Why is it not working without this?
 
 import networkx as nx
 # import pandas as pd
@@ -516,7 +517,7 @@ class App:
 
     def run(self, args):
 
-        self.load_config("/mounts/data/proj/hypersum/llm-transparency-tool/config/exp_olmo_config.json")
+        self.load_config("/mounts/data/proj/hypersum/LLM_PretrainSteps_Explorer/llm-transparency-tool/config/exp_olmo_config.json")
         
         self._stateful_model = load_model(
             model_name=self.model_name,
