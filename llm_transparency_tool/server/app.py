@@ -12,7 +12,7 @@ from tqdm import tqdm
 import time
 from copy import deepcopy
 import os
-# os.environ["CUDA_VISIBLE_DEVICES"] = "5"
+os.environ["CUDA_VISIBLE_DEVICES"] = "5"
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))) # Why is it not working without this?
 
@@ -479,7 +479,7 @@ class App:
                 }
             }
             if self._do_head_level:
-                heads_logit_lens_results = self.run_logit_lens_on_heads(model_info.n_layers, model_info.n_heads, subj_voc_id=subj_voc_id, answer_voc_id=answer_voc_id, subj_token_span=subj_token_span, obj_token_span=obj_token_span)
+                heads_logit_lens_results = self.run_logit_lens_on_heads(model_info.n_layers, model_info.n_heads, subj_voc_id=subj_voc_id, answer_voc_id=answer_voc_id)
                 sentence_analysis["logit_lens_result"]["heads"] = heads_logit_lens_results
 
             # If neuron level analysis is enabled
@@ -540,25 +540,54 @@ class App:
         with torch.inference_mode():
             # If a specific relation is provided, process only that relation
             if args.relation:
-                sentences, facts, subjects, targets, all_subject_positions, indices = parse_samples(relations[args.relation])
-                #print(len(sentences))
-                relation_sentence_analyses = self.process_sentences(
-                    sentences, all_subject_positions, facts, subjects, targets, args.relation, indices
-                )
-                all_sentence_analyses[args.relation] = relation_sentence_analyses
-                save_analysis_per_relation(relation_sentence_analyses, args.relation, revision_output_dir)
+                # Check if file already exists before processing
+                if not os.path.exists(os.path.join(revision_output_dir, f"{args.relation}.pkl")):
+                    sentences, facts, subjects, targets, all_subject_positions, indices = parse_samples(relations[args.relation])
+                    relation_sentence_analyses = self.process_sentences(
+                        sentences, all_subject_positions, facts, subjects, targets, args.relation, indices
+                    )
+                    all_sentence_analyses[args.relation] = relation_sentence_analyses
+                    save_analysis_per_relation(relation_sentence_analyses, args.relation, revision_output_dir)
+                else:
+                    print(f"Skipping processing for relation '{args.relation}' as it is already saved.")
+
+                # sentences, facts, subjects, targets, all_subject_positions, indices = parse_samples(relations[args.relation])
+                # #print(len(sentences))
+                # relation_sentence_analyses = self.process_sentences(
+                #     sentences, all_subject_positions, facts, subjects, targets, args.relation, indices
+                # )
+                # all_sentence_analyses[args.relation] = relation_sentence_analyses
+                # save_analysis_per_relation(relation_sentence_analyses, args.relation, revision_output_dir)
             else:
-                # Process all relations
+                
                 for relation, relation_data in tqdm(relations.items(), desc="Processing Relations"):
-                    #print(f"Relation {relation}")
+                    # Skip if the analysis has already been saved
+                    if os.path.exists(os.path.join(revision_output_dir, f"{relation}.pkl")):
+                        print(f"Skipping processing for relation '{relation}' as it is already saved.")
+                        continue
+                    
                     sentences, facts, subjects, targets, all_subject_positions, indices = parse_samples(relation_data)
-                    print(len(sentences))
+                    # Uncomment the line below if needed to see the count of sentences
+                    # print(len(sentences))
+                    
                     relation_sentence_analyses = self.process_sentences(
                         sentences, all_subject_positions, facts, subjects, targets, relation, indices
                     )
                     all_sentence_analyses[relation] = relation_sentence_analyses
                     
                     save_analysis_per_relation(relation_sentence_analyses, relation, revision_output_dir)
+                
+                # # Process all relations
+                # for relation, relation_data in tqdm(relations.items(), desc="Processing Relations"):
+                #     #print(f"Relation {relation}")
+                #     sentences, facts, subjects, targets, all_subject_positions, indices = parse_samples(relation_data)
+                #     print(len(sentences))
+                #     relation_sentence_analyses = self.process_sentences(
+                #         sentences, all_subject_positions, facts, subjects, targets, relation, indices
+                #     )
+                #     all_sentence_analyses[relation] = relation_sentence_analyses
+                    
+                #     save_analysis_per_relation(relation_sentence_analyses, relation, revision_output_dir)
 
         # Return or save all_sentence_analyses as needed
         return all_sentence_analyses
