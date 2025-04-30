@@ -23,8 +23,8 @@ class _RunInfo:
     tokens: Int[torch.Tensor, "batch pos"]
     logits: Float[torch.Tensor, "batch pos d_vocab"]
     cache: transformer_lens.ActivationCache
-    subj_tokens: Int[torch.Tensor, "batch pos"]
-    obj_tokens: Int[torch.Tensor, "batch pos"]
+#    subj_tokens: Int[torch.Tensor, "batch pos"]
+#    obj_tokens: Int[torch.Tensor, "batch pos"]
 
 
 # @st.cache_resource(
@@ -40,9 +40,9 @@ def load_hooked_transformer(
     revision: str,
     model_path: str,
     hf_model: Optional[transformers.PreTrainedModel] = None,
-    tlens_device: str = "cuda",
+    tlens_device: str = "cuda:0",
     default_prepend_bos: bool = True,
-    dtype: torch.dtype = torch.float32,
+    dtype: torch.dtype = torch.float16,
 ):
     # if tlens_device == "cuda":
     #     n_devices = torch.cuda.device_count()
@@ -155,18 +155,18 @@ class TransformerLensTransparentLlm(TransparentLlm):
         )
 
     @torch.no_grad()
-    def run(self, sentences: List[str], subject: str, object: str) -> None:
+    def run(self, sentences: List[str]) -> None:
         tokens = self._model.to_tokens(sentences, prepend_bos=self._prepend_bos)
         logits, cache = self._model.run_with_cache(tokens)
-        subj_token = self._model.to_tokens(subject, prepend_bos=False)
-        obj_token = self._model.to_tokens(object, prepend_bos=False)
+        #subj_token = self._model.to_tokens(subject, prepend_bos=False)
+        #obj_token = self._model.to_tokens(object, prepend_bos=False)
 
         self._last_run = _RunInfo(
             tokens=tokens,
             logits=logits,
-            cache=cache,
-            subj_tokens = subj_token,
-            obj_tokens = obj_token
+            cache=cache
+        #    subj_tokens = subj_token,
+        #    obj_tokens = obj_token
         )
 
     def batch_size(self) -> int:
@@ -174,36 +174,36 @@ class TransformerLensTransparentLlm(TransparentLlm):
             raise self._run_exception
         return self._last_run.logits.shape[0]
 
-    @typechecked
+    #@typechecked
     def tokens(self) -> Int[torch.Tensor, "batch pos"]:
         if not self._last_run:
             raise self._run_exception
         return self._last_run.tokens
 
-    @typechecked
+    #@typechecked
     def subj_tokens(self) -> Int[torch.Tensor, "batch pos"]:
         if not self._last_run:
             raise self._run_exception
         return self._last_run.subj_tokens
     
-    @typechecked
+    #@typechecked
     def obj_token(self) -> Int[torch.Tensor, "batch pos"]:
         if not self._last_run:
             raise self._run_exception
         return self._last_run.obj_tokens
 
-    @typechecked
+    #@typechecked
     def tokens_to_strings(self, tokens: Int[torch.Tensor, "pos"]) -> List[str]:
         return self._model.to_str_tokens(tokens)
 
-    @typechecked
+    #@typechecked
     def logits(self) -> Float[torch.Tensor, "batch pos d_vocab"]:
         if not self._last_run:
             raise self._run_exception
         return self._last_run.logits
 
     @torch.no_grad()
-    @typechecked
+    #@typechecked
     def unembed(
         self,
         t: torch.Tensor,
@@ -225,14 +225,14 @@ class TransformerLensTransparentLlm(TransparentLlm):
 
     # ================= Methods related to the residual stream =================
 
-    @typechecked
+    #@typechecked
     def residual_in(self, layer: int) -> Float[torch.Tensor, "batch pos d_model"]:
         if not self._last_run:
             raise self._run_exception
         # for logit lens over resid before attn
         return self._get_block(layer, "hook_resid_pre") ################
 
-    @typechecked
+    #@typechecked
     def residual_after_attn(
         self, layer: int
     ) -> Float[torch.Tensor, "batch pos d_model"]:
@@ -241,7 +241,7 @@ class TransformerLensTransparentLlm(TransparentLlm):
         # for logit lens over resid after atten
         return self._get_block(layer, "hook_resid_mid") #################
 
-    @typechecked
+    #@typechecked
     def residual_out(self, layer: int) -> Float[torch.Tensor, "batch pos d_model"]:
         if not self._last_run:
             raise self._run_exception
@@ -250,7 +250,7 @@ class TransformerLensTransparentLlm(TransparentLlm):
 
     # ================ Methods related to the feed-forward layer ===============
 
-    @typechecked
+    #@typechecked
     def ffn_out(self, layer: int) -> Float[torch.Tensor, "batch pos d_model"]:
         if not self._last_run:
             raise self._run_exception
@@ -258,7 +258,7 @@ class TransformerLensTransparentLlm(TransparentLlm):
         return self._get_block(layer, "hook_mlp_out") ####################
 
     @torch.no_grad()
-    @typechecked
+    #@typechecked
     def decomposed_ffn_out(
         self,
         batch_i: int,
@@ -271,16 +271,16 @@ class TransformerLensTransparentLlm(TransparentLlm):
         processed_activations = self._get_block(layer, "mlp.hook_post")[batch_i] ########################
         return torch.mul(processed_activations.unsqueeze(-1), self._model.blocks[layer].mlp.W_out)
 
-    @typechecked
+    #@typechecked
     def neuron_activations(
         self,
         batch_i: int,
         layer: int,
         pos: int,
     ) -> Float[torch.Tensor, "hidden"]:
-        return self._get_block(layer, "mlp.hook_pre")[batch_i][pos] ######################
+        return self._get_block(layer, "mlp.hook_post")[batch_i][pos] ######################
 
-    @typechecked
+    #@typechecked
     def neuron_output(
         self,
         layer: int,
@@ -291,13 +291,13 @@ class TransformerLensTransparentLlm(TransparentLlm):
 
     # ==================== Methods related to the attention ====================
 
-    @typechecked
+    #@typechecked
     def attention_matrix(
         self, batch_i: int, layer: int, head: int
     ) -> Float[torch.Tensor, "query_pos key_pos"]:
         return self._get_block(layer, "attn.hook_pattern")[batch_i][head]
 
-    @typechecked
+    #@typechecked
     def attention_output_per_head(
         self,
         batch_i: int,
@@ -308,7 +308,7 @@ class TransformerLensTransparentLlm(TransparentLlm):
         # For attention out on head
         return self._get_block(layer, "attn.hook_result")[batch_i][pos][head] #####################
 
-    @typechecked
+    #@typechecked
     def attention_output(
         self,
         batch_i: int,
@@ -319,7 +319,7 @@ class TransformerLensTransparentLlm(TransparentLlm):
         return self._get_block(layer, "hook_attn_out")[batch_i][pos] ######################
 
     @torch.no_grad()
-    @typechecked
+    #@typechecked
     def decomposed_attn(
         self, batch_i: int, layer: int
     ) -> Float[torch.Tensor, "pos key_pos head d_model"]:

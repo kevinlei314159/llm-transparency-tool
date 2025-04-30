@@ -4,7 +4,7 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Tuple
+from typing import Tuple, Optional
 
 import einops
 import torch
@@ -90,7 +90,7 @@ def get_contributions_with_one_off_part(
 
 
 @torch.no_grad()
-@typechecked
+#@typechecked
 def get_attention_contributions(
     resid_pre: Float[torch.Tensor, "batch pos d_model"],
     resid_mid: Float[torch.Tensor, "batch pos d_model"],
@@ -125,7 +125,7 @@ def get_attention_contributions(
 
 
 @torch.no_grad()
-@typechecked
+#@typechecked
 def get_mlp_contributions(
     resid_mid: Float[torch.Tensor, "batch pos d_model"],
     resid_post: Float[torch.Tensor, "batch pos d_model"],
@@ -143,12 +143,13 @@ def get_mlp_contributions(
 
 
 @torch.no_grad()
-@typechecked
+#@typechecked
 def get_decomposed_mlp_contributions(
     resid_mid: Float[torch.Tensor, "d_model"],
     resid_post: Float[torch.Tensor, "d_model"],
     decomposed_mlp_out: Float[torch.Tensor, "hidden d_model"],
     distance_norm: int = 1,
+    renormalizing_threshold: Optional[float] = None,
 ) -> Tuple[Float[torch.Tensor, "hidden"], float]:
     """
     Similar to `get_mlp_contributions`, but it takes the MLP output for each neuron of
@@ -161,6 +162,18 @@ def get_decomposed_mlp_contributions(
     neuron_contributions, residual_contribution = get_contributions_with_one_off_part(
         decomposed_mlp_out, resid_mid, resid_post, distance_norm
     )
+    
+    if renormalizing_threshold is not None:
+        device = neuron_contributions.device  # Ensure all tensors are on the same device
+        residual_contribution_tensor = torch.tensor([residual_contribution], device=device)
+        neuron_contributions, residual_contribution_tensor = apply_threshold_and_renormalize(
+            renormalizing_threshold,
+            neuron_contributions.unsqueeze(0),  # Add batch dimension for compatibility
+            residual_contribution_tensor  # Ensure residual_contribution is on the same device
+        )
+        neuron_contributions = neuron_contributions.squeeze(0)  # Remove batch dimension
+        residual_contribution = residual_contribution_tensor  # Convert back to scalar
+    
     return neuron_contributions, residual_contribution.item()
 
 
@@ -194,11 +207,16 @@ def apply_threshold_and_renormalize(
     c_blocks = c_blocks * (c_blocks > threshold)
     c_residual = c_residual * (c_residual > threshold)
 
-    if bound_dims > 0:
-        denom = c_residual + c_blocks.sum(dim=tuple(range(resid_dims, block_dims)))
-    else:
-        denom = c_residual + c_blocks
-    return (
-        c_blocks / denom.reshape(denom.shape + (1,) * bound_dims),
-        c_residual / denom,
+    #if bound_dims > 0:
+    #    denom = c_residual + c_blocks.sum(dim=tuple(range(resid_dims, block_dims)))
+    #else:
+    #    denom = c_residual + c_blocks
+    #return (
+    #    c_blocks / denom.reshape(denom.shape + (1,) * bound_dims),
+    #    c_residual / denom,
+    #)
+
+    return ( #changing this to manually turn off renormalisation
+        c_blocks,
+        c_residual
     )

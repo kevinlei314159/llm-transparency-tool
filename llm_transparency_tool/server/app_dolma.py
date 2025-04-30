@@ -129,7 +129,7 @@ class App:
         self._prepend_bos = config.get("prepend_bos", False)
         self._do_neuron_level = config.get("do_neuron_level", True)
         self._do_head_level = config.get("do_head_level", False)
-        self._contribution_threshold = config.get("contribution_threshold", 0.01) #set at 0.01 for the moment
+        self._contribution_threshold = config.get("contribution_threshold", 0) #set at 0 for the moment
         self._logit_lens_topK = config.get("logit_lens_topK", 10)
         self._logit_lens_topK_neurons = config.get("logit_lens_topK_neurons", 10)
 
@@ -258,6 +258,18 @@ class App:
                 results.append(c_ffn) #change back to c_ffn
             ffn_contributions.append(torch.stack(results))
         return torch.stack(ffn_contributions).transpose(1, 0)
+    
+    @torch.no_grad()
+    def compute_neuron_activations(self, n_layers):
+        tokens = self.stateful_model.tokens()[B0]
+        ffn_activations = []
+        for layer in range(n_layers):            
+            results = []
+            for token in range(len(tokens)):
+                a_ffn = self.stateful_model.neuron_activations(B0, layer, token)
+                results.append(a_ffn) #change back to c_ffn
+            ffn_activations.append(torch.stack(results))
+        return torch.stack(ffn_activations).transpose(1, 0)
 
 
     @torch.no_grad()
@@ -298,13 +310,13 @@ class App:
         model_info = self.stateful_model.model_info()
 
         # Build contribution graphs
-        graphs = cached_build_paths_to_predictions(
-            self._graph,
-            model_info.n_layers,
-            n_tokens,
-            range(n_tokens),
-            self._contribution_threshold,
-        )
+        #graphs = cached_build_paths_to_predictions(
+        #    self._graph,
+        #    model_info.n_layers,
+        #    n_tokens,
+        #    range(n_tokens),
+        #    self._contribution_threshold,
+        #)
 
         # Run logit lens on various outputs
         #resid_logit_lens_results = self.run_logit_lens_on_resid(model_info.n_layers)
@@ -330,13 +342,15 @@ class App:
         # If neuron level analysis is enabled
         if self._do_neuron_level:
             neuron_contributions = self.compute_neuron_contributions(model_info.n_layers)
-            top_neuron_contvals, top_neuron_indices = torch.sort(neuron_contributions,descending=True)
+            neuron_activations = torch.round(self.compute_neuron_activations(model_info.n_layers),decimals=4).to(torch.float16)
+            #only saving the top 100 to save storage space
+            top_neuron_contvals, top_neuron_indices = torch.topk(neuron_contributions,50)
             #nonzero_mask = top_neuron_contvals != 0
             #top_neuron_contvals = top_neuron_contvals[nonzero_mask] #cut off non-zero values
             #top_neuron_indices = top_neuron_indices[nonzero_mask]
             #top_neuron_contvals, top_neuron_indices = torch.topk(neuron_contributions, k=self._logit_lens_topK_neurons)
             top_neuron_indices = top_neuron_indices.cpu().numpy()
-            top_neuron_contvals = top_neuron_contvals.cpu().to(torch.float16).numpy()
+            top_neuron_contvals = torch.round(top_neuron_contvals.cpu(),decimals=4).to(torch.float16).numpy()
 
             #n_tokens, n_heads, n_neurons = neuron_contributions.shape
             
@@ -363,6 +377,7 @@ class App:
                 "vals": top_neuron_contvals,
                 "ind": top_neuron_indices
             }
+            sentence_analysis["neuron_activations"] = neuron_activations
             #sentence_analysis["logit_lens_result"]["neurons"] = run_logit_lens_on_neurons
 
         # Append sentence analysis for this sentence to the relation list
@@ -399,7 +414,14 @@ class App:
             all_samples = pickle.load(f)
 
         for i, sent in tqdm(all_samples.items(),total=1_000_000):
-            if f"{i}"+".pkl" in processed:
+            #early exit
+            if i <= 6000:
+                continue
+            elif i >= 106_000:
+                print(f"done {i} samples")
+                break
+
+            elif f"{i}"+".pkl" in processed:
                 print("already processed")
                 continue
             else:
@@ -410,6 +432,7 @@ class App:
                     torch.cuda.empty_cache()
                     del sentence_analysis
 
+        print("all_done")
 
             # Skip if the analysis has already been saved
             #if os.path.exists(os.path.join(revision_output_dir, f"{relation}.pkl")):
