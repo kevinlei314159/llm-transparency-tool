@@ -32,7 +32,7 @@ def get_val(x: torch.Tensor):
 def possible_devices() -> List[str]:
     devices = []
     if torch.cuda.is_available():
-        devices.append("gpu")
+        devices.append("gpu") #change this to "gpu" instead
     devices.append("cpu")
     return devices
 
@@ -54,7 +54,7 @@ def load_model(
     revision: str,
     _device: str,
     _model_path: Optional[str] = None,
-    _dtype: torch.dtype = torch.float32,
+    _dtype: torch.dtype = torch.float16,
     prepend_bos: bool = True
 ) -> TransparentLlm:
     """
@@ -69,7 +69,7 @@ def load_model(
     tl_lm = TransformerLensTransparentLlm(
         model_name=model_name,
         revision=revision,
-        model_path=_model_path,
+        model_path="/home/kaiwei/olmo7b_cache",#_model_path,
         hf_model=causal_lm,
         tokenizer=tokenizer,
         prepend_bos=prepend_bos,

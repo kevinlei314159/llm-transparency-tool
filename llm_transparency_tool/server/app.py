@@ -12,9 +12,10 @@ from tqdm import tqdm
 import time
 from copy import deepcopy
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "5"
+#os.environ["CUDA_VISIBLE_DEVICES"] = "7"
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))) # Why is it not working without this?
+print("sys.argv:", sys.argv)
 
 import networkx as nx
 # import pandas as pd
@@ -240,7 +241,7 @@ class App:
             config = json.load(f)
 
         self.model_name = config.get("model_name", "allenai/OLMo-7B-0424-hf")
-        self.device = config.get("device", "gpu")
+        self.device = config.get("device", "cuda:0")
         self._model_path = config.get("_model_path", None) 
         dtype_str = config.get("dtype", "torch.bfloat16")
         self.dtype = getattr(torch, dtype_str, torch.bfloat16)
@@ -248,9 +249,9 @@ class App:
         self._renormalize_after_threshold = config.get("renormalize_after_threshold", True)
         self._normalize_before_unembedding = config.get("normalize_before_unembedding", True)
         self._prepend_bos = config.get("prepend_bos", False)
-        self._do_neuron_level = config.get("do_neuron_level", False)
+        self._do_neuron_level = config.get("do_neuron_level", True)
         self._do_head_level = config.get("do_head_level", False)
-        self._contribution_threshold = config.get("contribution_threshold", 0.01)
+        self._contribution_threshold = config.get("contribution_threshold", 0.01) #set at 0.01 for the moment
         self._logit_lens_topK = config.get("logit_lens_topK", 10)
         self._logit_lens_topK_neurons = config.get("logit_lens_topK_neurons", 10)
 
@@ -311,8 +312,8 @@ class App:
             result["token_idx"] = token_idx
             # tok = self.stateful_model.tokens_to_strings(sorted_indices[token_idx][:self._logit_lens_topK].cpu())
             result["top_tokens"] = [int(i) for i in sorted_indices[token_idx][:self._logit_lens_topK].cpu()]
-            # result["rank_subject"] = get_val((sorted_indices[token_idx] == subj_voc_id).nonzero(as_tuple=True)[0])
-            # result["rank_answer"] = get_val((sorted_indices[token_idx] == answer_voc_id).nonzero(as_tuple=True)[0])
+            # result["rank_subject"] = get_val((sorted_indices[token_idx] get_val((sorted_indices[token_idx] == answer_voc_id).nonzero(as_tuple=True)[0])== subj_voc_id).nonzero(as_tuple=True)[0])
+            # result["rank_answer"] = 
             result["rank_subject"] = get_val(rank_subj[token_idx])
             result["rank_answer"] = get_val(rank_ans[token_idx])
             result["logit_subject"] = get_val(logit_scores[token_idx][subj_voc_id].cpu())
@@ -385,7 +386,7 @@ class App:
             decomposed_ffn = self.stateful_model.decomposed_ffn_out(B0, layer, -1)
             results = []
             for token in range(len(tokens)):
-                c_ffn, _ = contributions.get_decomposed_mlp_contributions(resid_mid[token], resid_post[token], decomposed_ffn[token])
+                c_ffn, _ = contributions.get_decomposed_mlp_contributions(resid_mid[token], resid_post[token], decomposed_ffn[token], renormalizing_threshold=0.01)
                 results.append(c_ffn)
             ffn_contributions.append(torch.stack(results))
         return torch.stack(ffn_contributions).transpose(1, 0)
@@ -398,7 +399,7 @@ class App:
             sel_neurons = sel_neurons_layerwise[layer]
             for neuron in sel_neurons:
                 hook_name = f"L{layer}N{neuron}"
-                representations = self.stateful_model.neuron_output(layer, neuron).unsqueeze(0).unsqueeze(1)
+                representations = self.stateful_model.neuron_output(layer, int(neuron)).unsqueeze(0).unsqueeze(1)
                 logit_scores = self._unembed(representations)[B0][0]
                 probs = torch.nn.functional.softmax(logit_scores, dim=-1).cpu()
                 entropy = (-probs * torch.log(probs + 1e-10)).sum(dim=-1).cpu()
@@ -484,17 +485,28 @@ class App:
 
             # If neuron level analysis is enabled
             if self._do_neuron_level:
+                #TODO: Change this into getting just all the indices
                 neuron_contributions = self.compute_neuron_contributions(model_info.n_layers)
                 top_neuron_contvals, top_neuron_indices = torch.topk(neuron_contributions, k=self._logit_lens_topK_neurons)
                 top_neuron_indices = top_neuron_indices.cpu().numpy()
                 top_neuron_contvals = top_neuron_contvals.cpu().to(torch.float16).numpy()
 
+                n_tokens, n_heads, n_neurons = neuron_contributions.shape
+                
                 sel_neurons_layerwise = []
                 for layer in range(model_info.n_layers):
                     sel_neurons_layerwise.append([])
                     for token in range(n_tokens):
                         sel_neurons_layerwise[-1].extend(top_neuron_indices[token, layer].tolist())
                     sel_neurons_layerwise[-1] = list(set(sel_neurons_layerwise[-1]))
+
+                #n_tokens, n_heads, n_neurons = neuron_contributions.shape
+                #all_neuron_indices = torch.arange(n_neurons, device=neuron_contributions.device)#.unsqueeze(0).unsqueeze(0)
+                #all_neuron_indices = all_neuron_indices.expand(n_tokens, n_heads, -1)
+
+                # Convert to numpy if needed
+                #all_neuron_indices = all_neuron_indices.cpu().numpy()  # Shape: (n_tokens, 32, 11008)
+
 
                 run_logit_lens_on_neurons = self.run_logit_lens_on_neurons(
                     model_info.n_layers,
@@ -504,8 +516,8 @@ class App:
                 )
                 #print(f"Done with Neurons {time.time() - start_time}")
                 sentence_analysis["neuron_contributions"] = {
-                    "vals": top_neuron_contvals,
-                    "ind": top_neuron_indices
+                    "vals": neuron_contributions,
+                    "ind": sel_neurons_layerwise
                 }
                 sentence_analysis["logit_lens_result"]["neurons"] = run_logit_lens_on_neurons
 
@@ -517,7 +529,7 @@ class App:
 
     def run(self, args):
 
-        self.load_config("/mounts/data/proj/hypersum/LLM_PretrainSteps_Explorer/llm-transparency-tool/config/exp_olmo_config.json")
+        self.load_config("/home/kaiwei/llm-transparency-tool/config/exp_olmo_config.json")
         
         self._stateful_model = load_model(
             model_name=self.model_name,

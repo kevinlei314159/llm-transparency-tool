@@ -89,7 +89,7 @@ class TransformerLensTransparentLlm(TransparentLlm):
         hf_model: Optional[transformers.PreTrainedModel] = None,
         tokenizer: Optional[transformers.PreTrainedTokenizer] = None,
         device: str = "gpu",
-        dtype: torch.dtype = torch.float32,
+        dtype: torch.dtype = torch.float16,
         prepend_bos: bool = True
     ):
         if device == "gpu":
@@ -222,6 +222,12 @@ class TransformerLensTransparentLlm(TransparentLlm):
         if not self._last_run:
             raise self._run_exception
         return self._last_run.cache[f"blocks.{layer}.{block_name}"]
+
+    def get_all_blocks(self, block_name: str):
+        if not self._last_run:
+            raise self._run_exception
+        L = self._model.cfg.n_layers
+        return [self._last_run.cache[f"blocks.{layer}.{block_name}"] for layer in range(L)]
 
     # ================= Methods related to the residual stream =================
 

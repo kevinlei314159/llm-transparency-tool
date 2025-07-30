@@ -63,7 +63,8 @@ class TransparentLlmTestCase(unittest.TestCase):
 
     def test_residual_in_and_out(self):
         """
-        Test that residual_in is a residual_out for the previous layer.
+        Test that residual_in is a 
+          for the previous layer.
         """
         for layer in range(1, 12):
             prev_residual_out = self._llm.residual_out(layer - 1)

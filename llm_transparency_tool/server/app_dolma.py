@@ -304,9 +304,6 @@ class App:
 
         tokens = self.stateful_model.tokens()[B0]
 
-        n_tokens = tokens.shape[0]
-        #print(f"Number of Tokens: {n_tokens}")
-
         model_info = self.stateful_model.model_info()
 
         # Build contribution graphs
@@ -343,7 +340,7 @@ class App:
         if self._do_neuron_level:
             neuron_contributions = self.compute_neuron_contributions(model_info.n_layers)
             neuron_activations = torch.round(self.compute_neuron_activations(model_info.n_layers),decimals=4).to(torch.float16)
-            #only saving the top 100 to save storage space
+            #only saving the top 50 to save storage space
             top_neuron_contvals, top_neuron_indices = torch.topk(neuron_contributions,50)
             #nonzero_mask = top_neuron_contvals != 0
             #top_neuron_contvals = top_neuron_contvals[nonzero_mask] #cut off non-zero values
@@ -403,9 +400,6 @@ class App:
         # Create the base output directory (based on model name)
         base_output_dir = args.output_path
         samples_file = args.dataset_path
-        
-        # Create the revision-specific directory
-        revision_output_dir = os.path.join(base_output_dir, args.revision)
 
         # samples have format {index: sent}
         processed = [item[2] for item in os.walk(base_output_dir)][0]
@@ -417,6 +411,7 @@ class App:
             #early exit
             if i <= 6000:
                 continue
+
             elif i >= 106_000:
                 print(f"done {i} samples")
                 break
@@ -424,6 +419,7 @@ class App:
             elif f"{i}"+".pkl" in processed:
                 print("already processed")
                 continue
+
             else:
                 with torch.inference_mode():
                     sentence_analysis = self.process_sentences(sent)

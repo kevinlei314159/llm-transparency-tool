@@ -1,15 +1,15 @@
 {
     "model_name": "allenai/OLMo-7B-0424-hf",
-    "_model_path": "/nfs/datz/olmo_models/",
+    "_model_path": "/home/kaiwei/olmo7b_cache/",
     "device": "gpu",
-    "dtype": "torch.bfloat16",
-    "amp_enabled": true,
-    "renormalize_after_threshold": true,
-    "normalize_before_unembedding": true,
-    "prepend_bos": false,
+    "dtype": "torch.float16",
+    "amp_enabled": false,
+    "renormalize_after_threshold": false,
+    "normalize_before_unembedding": false,
+    "prepend_bos": true,
     "do_neuron_level": true,
     "do_head_level": false,
-    "contribution_threshold": 0.01,
+    "contribution_threshold": 0.0,
     "logit_lens_topK": 10,
     "logit_lens_topK_neurons": 10
 }

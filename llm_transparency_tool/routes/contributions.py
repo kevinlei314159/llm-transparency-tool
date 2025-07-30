@@ -205,7 +205,7 @@ def apply_threshold_and_renormalize(
     assert c_blocks.shape[0:resid_dims] == c_residual.shape
 
     c_blocks = c_blocks * (c_blocks > threshold)
-    c_residual = c_residual * (c_residual > threshold)
+    #c_residual = c_residual * (c_residual > threshold)
 
     #if bound_dims > 0:
     #    denom = c_residual + c_blocks.sum(dim=tuple(range(resid_dims, block_dims)))
