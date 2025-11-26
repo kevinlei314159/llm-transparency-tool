@@ -9,7 +9,7 @@
     "prepend_bos": true,
     "do_neuron_level": true,
     "do_head_level": false,
-    "contribution_threshold": 0.0,
+    "contribution_threshold": 0.02,
     "logit_lens_topK": 10,
     "logit_lens_topK_neurons": 10
 }
